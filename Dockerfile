@@ -17,42 +17,34 @@ RUN apt-get update && apt-get install -y \
     git wget vim tmux \
     net-tools netcat-traditional \
     python3-full python3-pip \
+    python3-colcon-common-extensions \
     build-essential cmake \
     usbutils \
-    # RPLidar
     ros-${ROS_DISTRO}-rplidar-ros \
-    # Nav2
     ros-${ROS_DISTRO}-nav2-bringup \
     ros-${ROS_DISTRO}-navigation2 \
     ros-${ROS_DISTRO}-nav2-common \
-    # SLAM
     ros-${ROS_DISTRO}-slam-toolbox \
-    # Foxglove (web tabanlı görselleştirme)
     ros-${ROS_DISTRO}-foxglove-bridge \
-    # TF yardımcıları
     ros-${ROS_DISTRO}-tf-transformations \
     ros-${ROS_DISTRO}-tf2-tools \
+    ros-${ROS_DISTRO}-joint-state-publisher \
+    ros-${ROS_DISTRO}-robot-localization \
+    ros-${ROS_DISTRO}-rosbridge-server \
+    ros-${ROS_DISTRO}-xacro \
     && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------------------------------------------------
-# Python bağımlılıkları (base image'ın venv'ine kur)
+# Python bağımlılıkları
 # --------------------------------------------------------------------------
 COPY requirements.txt /requirements.txt
 RUN pip install --upgrade pip && \
     pip install -r /requirements.txt
 
 # --------------------------------------------------------------------------
-# rosdep — sadece manifests kopyalanır (cache dostu)
-# --------------------------------------------------------------------------
-WORKDIR ${WORKSPACE_ROOT}
-
-COPY manifests/ /manifests/
-RUN rosdep update && \
-    rosdep install --from-paths /manifests --ignore-src -r -y
-
-# --------------------------------------------------------------------------
 # Kaynak kod
 # --------------------------------------------------------------------------
+WORKDIR ${WORKSPACE_ROOT}
 COPY ros2_amiga_ws/ ${WORKSPACE_ROOT}/src/
 
 # --------------------------------------------------------------------------
@@ -63,7 +55,7 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # --------------------------------------------------------------------------
-# Shell konfig — container'a girince her şey hazır
+# Shell konfig
 # --------------------------------------------------------------------------
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
     echo "source ${WORKSPACE_ROOT}/install/setup.bash" >> /root/.bashrc && \
