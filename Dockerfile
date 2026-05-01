@@ -38,8 +38,7 @@ RUN apt-get update && apt-get install -y \
 # Python bağımlılıkları (base image'ın venv'ine kur)
 # --------------------------------------------------------------------------
 COPY requirements.txt /requirements.txt
-RUN . /.venv/bin/activate && \
-    pip install --upgrade pip && \
+RUN pip install --upgrade pip && \
     pip install -r /requirements.txt
 
 # --------------------------------------------------------------------------
@@ -60,7 +59,6 @@ COPY ros2_amiga_ws/ ${WORKSPACE_ROOT}/src/
 # Build
 # --------------------------------------------------------------------------
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    . /.venv/bin/activate && \
     colcon build --symlink-install \
     --cmake-args -DCMAKE_BUILD_TYPE=Release
 
@@ -69,7 +67,6 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
 # --------------------------------------------------------------------------
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
     echo "source ${WORKSPACE_ROOT}/install/setup.bash" >> /root/.bashrc && \
-    echo ". /.venv/bin/activate" >> /root/.bashrc && \
     echo "export ROS_DOMAIN_ID=\${ROS_DOMAIN_ID:-0}" >> /root/.bashrc
 
 COPY entrypoint.sh /entrypoint.sh
