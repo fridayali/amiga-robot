@@ -1,0 +1,25 @@
+services:
+  amiga_robot:
+    image: amiga-ros2:latest
+    container_name: amiga_robot
+    network_mode: host        # ROS2 DDS PC ile haberleşmesi için zorunlu
+    privileged: true          # /dev erişimi için
+    restart: unless-stopped
+
+    runtime: nvidia           # Xavier GPU erişimi
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ROS_DOMAIN_ID=0       # PC ile aynı olmalı
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+    volumes:
+      - /dev:/dev
+      - /tmp/.X11-unix:/tmp/.X11-unix    # opsiyonel: RViz için
+
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0        # RPLidar
+
+    # İlk testlerde bash bırak, çalışınca kendi launch dosyana çevir:
+    # command: ros2 launch amiga_ros2_bridge amiga_bridge.launch.py
+    command: bash
