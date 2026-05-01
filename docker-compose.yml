@@ -22,4 +22,4 @@ services:
 
     # İlk testlerde bash bırak, çalışınca kendi launch dosyana çevir:
     # command: ros2 launch amiga_ros2_bridge amiga_bridge.launch.py
-    command: bash
+    command: tail -f /dev/null
