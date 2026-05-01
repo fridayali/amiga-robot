@@ -15,11 +15,11 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('serial_port',     default_value='/dev/ttyUSB0',
                               description='RPLidar serial port'),
-        DeclareLaunchArgument('serial_baudrate', default_value='115200',
+        DeclareLaunchArgument('serial_baudrate', default_value='1000000',
                               description='115200 → A1/A2/A3  |  256000 → S1/S2/S3'),
         DeclareLaunchArgument('frame_id',        default_value='laser_link',
                               description='TF frame yayınlanacak isim'),
-        DeclareLaunchArgument('scan_mode',       default_value='Sensitivity',
+        DeclareLaunchArgument('scan_mode',       default_value='DenseBoost',
                               description='RPLidar tarama modu'),
 
         Node(

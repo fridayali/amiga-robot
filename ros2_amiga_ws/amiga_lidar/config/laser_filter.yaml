@@ -10,8 +10,14 @@ scan_to_scan_filter_chain:
         lower_replacement_value: -.inf
         upper_replacement_value: .inf
     filter2:
-      name: angular_bounds
-      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      name: box_filter
+      type: laser_filters/LaserScanBoxFilter
       params:
-        lower_angle: -2.356
-        upper_angle: 2.356
+        box_frame: base_link
+        min_x: -2.0    # arkadan 2 metre
+        max_x:  0.2    # önden 20 cm
+        min_y: -0.2    # sağdan 20 cm
+        max_y:  1.5    # soldan 1.5 metre
+        min_z: -1.0
+        max_z:  1.0
+        invert: false
