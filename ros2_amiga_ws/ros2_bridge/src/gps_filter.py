@@ -8,6 +8,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix, NavSatStatus
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
 from tf_transformations import quaternion_from_euler
 
 from farm_ng.canbus.canbus_pb2 import Twist2d
@@ -31,8 +32,9 @@ class MultiClientSubscriber(Node):
         self.pose: Pose3F64 = None
 
         # ROS2 publishers
-        self.pub_fix = self.create_publisher(NavSatFix, "/gps/fix", 10)
+        self.pub_fix  = self.create_publisher(NavSatFix, "/gps/fix", 10)
         self.pub_pose = self.create_publisher(PoseStamped, "/gps/pose", 10)
+        self.pub_odom = self.create_publisher(Odometry, "/rtk/odom", 10)
 
         # GPS cache
         self.last_lat = 0.0
@@ -129,9 +131,6 @@ class MultiClientSubscriber(Node):
                         0, 0, 0, 0, 0, 0.1
                     ]
 
-                    # Yayınla
-                    if not hasattr(self, "pub_odom"):
-                        self.pub_odom = self.create_publisher(Odometry, "/rtk/odom", 10)
                     self.pub_odom.publish(odom_msg)
 
                     print(
