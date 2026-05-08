@@ -123,12 +123,12 @@ class MultiClientSubscriber(Node):
                     odom_msg.pose.pose.orientation.z = q[2]
                     odom_msg.pose.pose.orientation.w = q[3]
                     odom_msg.pose.covariance = [
-                        0.05, 0, 0, 0, 0, 0,
-                        0, 0.05, 0, 0, 0, 0,
-                        0, 0, 0.05, 0, 0, 0,
-                        0, 0, 0, 0.1, 0, 0,
-                        0, 0, 0, 0, 0.1, 0,
-                        0, 0, 0, 0, 0, 0.1
+                        0.05, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.05, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.05, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.1, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.1, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.1
                     ]
 
                     self.pub_odom.publish(odom_msg)

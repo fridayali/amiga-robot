@@ -33,8 +33,8 @@ class MotorStatePublisher(Node):
                 motors.append(MotorState.from_proto(motor))
             
             # Extract the motor temperatures and voltages
-            motor_temperatures = [motor.temperature for motor in motors]
-            motor_voltages = [motor.voltage for motor in motors]
+            motor_temperatures = [float(motor.temperature) for motor in motors]
+            motor_voltages = [float(motor.voltage) for motor in motors]
 
             # Publish motor state
             self.publish_motor_state(motor_temperatures)
