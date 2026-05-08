@@ -1,14 +1,22 @@
 import os
+import subprocess
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, Command
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('amiga_description')
     urdf_file = os.path.join(pkg_dir, 'urdf', 'amiga.urdf.xacro')
+
+    robot_description = subprocess.run(
+        ['xacro', urdf_file],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
 
     use_sim_time = LaunchConfiguration('use_sim_time')
 
@@ -23,7 +31,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
-                'robot_description': Command(['xacro ', urdf_file]),
+                'robot_description': robot_description,
             }],
         ),
     ])
