@@ -11,8 +11,16 @@ def generate_launch_description():
     pkg_lidar  = get_package_share_directory('amiga_lidar')
     pkg_ekf    = get_package_share_directory('amiga_navsat_ekf')
     pkg_nav    = get_package_share_directory('amiga_navigation')
+    pkg_desc   = get_package_share_directory('amiga_description')
 
     use_sim_time = LaunchConfiguration('use_sim_time')
+
+    description_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_desc, 'launch', 'description.launch.py')
+        ),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
+    )
 
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -62,6 +70,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
 
+        description_launch,
         lidar_launch,
         navsat_launch,
         navigation_launch,
