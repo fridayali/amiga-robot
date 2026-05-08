@@ -286,10 +286,13 @@ class TaskManagerNode(Node):
 
     def _result_cb(self, future):
         self._current_goal_handle = None
-        if self._state == TaskState.CANCELING:
+        status = future.result().status
+        if self._state == TaskState.CANCELING or status == 5:
             self.get_logger().info('Hedef iptal edildi.')
+        elif status == 4:
+            self.get_logger().info('Hedefe ulaşıldı.')
         else:
-            self.get_logger().info(f'Hedefe ulaşıldı. Status: {future.result().status}')
+            self.get_logger().error(f'Nav2 hedef ABORT etti! Status: {status} — TF/map/costmap kontrol et.')
         self._state = TaskState.IDLE
         self._publish_status()
 
