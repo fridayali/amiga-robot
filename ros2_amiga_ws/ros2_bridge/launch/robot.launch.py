@@ -18,6 +18,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_lidar, 'launch', 'lidar.launch.py')
         ),
+        launch_arguments={
+            'serial_baudrate': '1000000',
+            'scan_mode':       'DenseBoost',
+        }.items(),
     )
 
     # EKF + navsat_transform: fromLL servisi burada ayağa kalkar
