@@ -46,9 +46,9 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('serial_port',     default_value='/dev/ttyUSB0'),
-        DeclareLaunchArgument('serial_baudrate', default_value='115200'),
+        DeclareLaunchArgument('serial_baudrate', default_value='1000000'),
         DeclareLaunchArgument('frame_id',        default_value='laser_link'),
-        DeclareLaunchArgument('scan_mode',       default_value='Sensitivity'),
+        DeclareLaunchArgument('scan_mode',       default_value='DenseBoost'),
         DeclareLaunchArgument('use_filter',      default_value='true',
                               description='Laser filter düğümünü başlat'),
 
