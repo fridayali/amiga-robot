@@ -5,8 +5,6 @@ Topics subscribed:
   /task_manager/add_waypoint  (geometry_msgs/PoseStamped)  — enqueue a waypoint
   /task_manager/cancel        (std_msgs/Empty)             — cancel current mission
   /mission_segments           (std_msgs/String)            — JSON mission from websocket_bridge
-  /gps/fix                    (sensor_msgs/NavSatFix)      — current GPS (RTK referansı için)
-  /rtk/odom                   (nav_msgs/Odometry)          — RTK map frame pozisyonu
 
 Topics published:
   /task_manager/status        (std_msgs/String)            — current task status
@@ -30,12 +28,14 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import String, Empty
 from std_srvs.srv import Trigger, SetBool
 from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Odometry
-from sensor_msgs.msg import NavSatFix
 from nav2_msgs.action import NavigateToPose
 
 from collections import deque
 from enum import Enum, auto
+
+# navsat_transform datum ile aynı — map frame bu noktaya göre hizalı
+_DATUM_LAT = 39.79609718
+_DATUM_LON = 32.53153558
 
 
 class TaskState(Enum):
@@ -73,23 +73,9 @@ class TaskManagerNode(Node):
                                  self._cb_mission_segments, 10,
                                  callback_group=self._cb_group)
 
-        # RTK referans noktası için GPS ve odom
-        self.create_subscription(NavSatFix, '/gps/fix',
-                                 self._cb_gps, 10,
-                                 callback_group=self._cb_group)
-        self.create_subscription(Odometry, '/rtk/odom',
-                                 self._cb_rtk_odom, 10,
-                                 callback_group=self._cb_group)
-
         # Services
         self.create_service(Trigger, '/task_manager/clear_queue', self._srv_clear_queue)
         self.create_service(SetBool, '/task_manager/pause',       self._srv_pause)
-
-        # RTK referans: (lat0, lon0) ↔ (x0, y0) in map frame
-        self._ref_gps: tuple | None = None   # (lat, lon)
-        self._ref_map: tuple | None = None   # (x, y)
-        self._latest_gps: tuple | None = None
-        self._latest_map: tuple | None = None
 
         # Queue items: PoseStamped (nav goal) or dict {'action': 'plow_down'/'plow_up'}
         self._queue: deque = deque()
@@ -99,53 +85,25 @@ class TaskManagerNode(Node):
 
         self.create_timer(0.5, self._dispatch_timer_cb, callback_group=self._cb_group)
 
-        self.get_logger().info('TaskManagerNode started.')
-
-    # ------------------------------------------------------------------ #
-    #  RTK Referans                                                        #
-    # ------------------------------------------------------------------ #
-
-    def _cb_gps(self, msg: NavSatFix):
-        if msg.status.status < 0:
-            return
-        self._latest_gps = (msg.latitude, msg.longitude)
-
-    def _cb_rtk_odom(self, msg: Odometry):
-        p = msg.pose.pose.position
-        self._latest_map = (p.x, p.y)
-
-    def _ensure_ref(self) -> bool:
-        """İlk çağrıda referans noktasını sabitle."""
-        if self._ref_gps is not None:
-            return True
-        if self._latest_gps is None or self._latest_map is None:
-            return False
-        self._ref_gps = self._latest_gps
-        self._ref_map = self._latest_map
         self.get_logger().info(
-            f'RTK referans noktası alındı: '
-            f'lat={self._ref_gps[0]:.7f} lon={self._ref_gps[1]:.7f} '
-            f'→ map x={self._ref_map[0]:.3f} y={self._ref_map[1]:.3f}')
-        return True
+            f'TaskManagerNode başladı. Datum: lat={_DATUM_LAT} lon={_DATUM_LON}')
+
+    # ------------------------------------------------------------------ #
+    #  GPS → map frame (datum = map origin)                               #
+    # ------------------------------------------------------------------ #
 
     def _latlon_to_map(self, lat: float, lon: float):
-        """Lat/lon → map frame PoseStamped (RTK referansına göre ENU dönüşümü)."""
-        if not self._ensure_ref():
-            self.get_logger().error('RTK referans noktası henüz yok, GPS/odom bekleniyor.')
-            return None
-
-        lat0, lon0 = self._ref_gps
-        x0,   y0   = self._ref_map
+        """Lat/lon → map frame PoseStamped. Datum = map(0,0)."""
         R = 6378137.0  # WGS-84 yarıçapı
 
-        dx = R * math.radians(lon - lon0) * math.cos(math.radians(lat0))  # doğu
-        dy = R * math.radians(lat - lat0)                                  # kuzey
+        dx = R * math.radians(lon - _DATUM_LON) * math.cos(math.radians(_DATUM_LAT))
+        dy = R * math.radians(lat - _DATUM_LAT)
 
         pose = PoseStamped()
         pose.header.frame_id = 'map'
         pose.header.stamp    = self.get_clock().now().to_msg()
-        pose.pose.position.x = x0 + dx
-        pose.pose.position.y = y0 + dy
+        pose.pose.position.x = dx
+        pose.pose.position.y = dy
         pose.pose.position.z = 0.0
         pose.pose.orientation.w = 1.0
         return pose
@@ -178,11 +136,7 @@ class TaskManagerNode(Node):
             action = seg.get('action')
             if action == 'move':
                 pose = self._latlon_to_map(seg['latitude'], seg['longitude'])
-                if pose:
-                    new_queue.append(pose)
-                else:
-                    self.get_logger().error(
-                        f"Dönüşüm başarısız: segment {seg['order_index']} atlandı.")
+                new_queue.append(pose)
             elif action in ('plow_down', 'plow_up'):
                 new_queue.append({'action': action})
 
