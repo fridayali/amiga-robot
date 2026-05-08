@@ -5,6 +5,8 @@ Topics subscribed:
   /task_manager/add_waypoint  (geometry_msgs/PoseStamped)  — enqueue a waypoint
   /task_manager/cancel        (std_msgs/Empty)             — cancel current mission
   /mission_segments           (std_msgs/String)            — JSON mission from websocket_bridge
+  /gps/fix                    (sensor_msgs/NavSatFix)      — current GPS (RTK referansı için)
+  /rtk/odom                   (nav_msgs/Odometry)          — RTK map frame pozisyonu
 
 Topics published:
   /task_manager/status        (std_msgs/String)            — current task status
@@ -17,6 +19,7 @@ Services:
 """
 
 import json
+import math
 import threading
 
 import rclpy
@@ -27,8 +30,9 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import String, Empty
 from std_srvs.srv import Trigger, SetBool
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import NavSatFix
 from nav2_msgs.action import NavigateToPose
-from robot_localization.srv import FromLL
 
 from collections import deque
 from enum import Enum, auto
@@ -53,10 +57,6 @@ class TaskManagerNode(Node):
             self, NavigateToPose, 'navigate_to_pose',
             callback_group=self._cb_group)
 
-        # Service client: GPS lat/lon → map frame Point
-        self._from_ll_client = self.create_client(
-            FromLL, '/fromLL', callback_group=self._cb_group)
-
         # Publishers
         self._status_pub = self.create_publisher(String, '/task_manager/status', 10)
         self._goal_pub   = self.create_publisher(PoseStamped, '/task_manager/current_goal', 10)
@@ -73,9 +73,23 @@ class TaskManagerNode(Node):
                                  self._cb_mission_segments, 10,
                                  callback_group=self._cb_group)
 
+        # RTK referans noktası için GPS ve odom
+        self.create_subscription(NavSatFix, '/gps/fix',
+                                 self._cb_gps, 10,
+                                 callback_group=self._cb_group)
+        self.create_subscription(Odometry, '/rtk/odom',
+                                 self._cb_rtk_odom, 10,
+                                 callback_group=self._cb_group)
+
         # Services
         self.create_service(Trigger, '/task_manager/clear_queue', self._srv_clear_queue)
         self.create_service(SetBool, '/task_manager/pause',       self._srv_pause)
+
+        # RTK referans: (lat0, lon0) ↔ (x0, y0) in map frame
+        self._ref_gps: tuple | None = None   # (lat, lon)
+        self._ref_map: tuple | None = None   # (x, y)
+        self._latest_gps: tuple | None = None
+        self._latest_map: tuple | None = None
 
         # Queue items: PoseStamped (nav goal) or dict {'action': 'plow_down'/'plow_up'}
         self._queue: deque = deque()
@@ -88,11 +102,59 @@ class TaskManagerNode(Node):
         self.get_logger().info('TaskManagerNode started.')
 
     # ------------------------------------------------------------------ #
+    #  RTK Referans                                                        #
+    # ------------------------------------------------------------------ #
+
+    def _cb_gps(self, msg: NavSatFix):
+        if msg.status.status < 0:
+            return
+        self._latest_gps = (msg.latitude, msg.longitude)
+
+    def _cb_rtk_odom(self, msg: Odometry):
+        p = msg.pose.pose.position
+        self._latest_map = (p.x, p.y)
+
+    def _ensure_ref(self) -> bool:
+        """İlk çağrıda referans noktasını sabitle."""
+        if self._ref_gps is not None:
+            return True
+        if self._latest_gps is None or self._latest_map is None:
+            return False
+        self._ref_gps = self._latest_gps
+        self._ref_map = self._latest_map
+        self.get_logger().info(
+            f'RTK referans noktası alındı: '
+            f'lat={self._ref_gps[0]:.7f} lon={self._ref_gps[1]:.7f} '
+            f'→ map x={self._ref_map[0]:.3f} y={self._ref_map[1]:.3f}')
+        return True
+
+    def _latlon_to_map(self, lat: float, lon: float):
+        """Lat/lon → map frame PoseStamped (RTK referansına göre ENU dönüşümü)."""
+        if not self._ensure_ref():
+            self.get_logger().error('RTK referans noktası henüz yok, GPS/odom bekleniyor.')
+            return None
+
+        lat0, lon0 = self._ref_gps
+        x0,   y0   = self._ref_map
+        R = 6378137.0  # WGS-84 yarıçapı
+
+        dx = R * math.radians(lon - lon0) * math.cos(math.radians(lat0))  # doğu
+        dy = R * math.radians(lat - lat0)                                  # kuzey
+
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.header.stamp    = self.get_clock().now().to_msg()
+        pose.pose.position.x = x0 + dx
+        pose.pose.position.y = y0 + dy
+        pose.pose.position.z = 0.0
+        pose.pose.orientation.w = 1.0
+        return pose
+
+    # ------------------------------------------------------------------ #
     #  Mission Segments (from websocket_bridge → /mission_segments)       #
     # ------------------------------------------------------------------ #
 
     def _cb_mission_segments(self, msg: String):
-        # Load mission in a separate thread to avoid blocking the executor
         threading.Thread(target=self._load_mission, args=(msg.data,), daemon=True).start()
 
     def _load_mission(self, json_str: str):
@@ -115,55 +177,21 @@ class TaskManagerNode(Node):
         for seg in segments:
             action = seg.get('action')
             if action == 'move':
-                pose = self._gps_to_pose(seg['latitude'], seg['longitude'])
+                pose = self._latlon_to_map(seg['latitude'], seg['longitude'])
                 if pose:
                     new_queue.append(pose)
                 else:
                     self.get_logger().error(
-                        f"fromLL failed for segment {seg['order_index']}, skipping.")
+                        f"Dönüşüm başarısız: segment {seg['order_index']} atlandı.")
             elif action in ('plow_down', 'plow_up'):
                 new_queue.append({'action': action})
 
         self._queue = new_queue
         self._state = TaskState.IDLE
         self.get_logger().info(
-            f"Mission {self._mission_meta.get('mission_id')} loaded: "
-            f"{len(new_queue)} steps queued.")
+            f"Mission {self._mission_meta.get('mission_id')} yüklendi: "
+            f"{len(new_queue)} adım.")
         self._publish_status()
-
-    def _gps_to_pose(self, lat: float, lon: float):
-        """Call /fromLL to convert GPS coordinates to map-frame PoseStamped."""
-        if not self._from_ll_client.wait_for_service(timeout_sec=5.0):
-            self.get_logger().error('/fromLL service not available.')
-            return None
-
-        req = FromLL.Request()
-        req.ll_point.latitude  = float(lat)
-        req.ll_point.longitude = float(lon)
-        req.ll_point.altitude  = 0.0
-
-        event = threading.Event()
-        result_holder: list = [None]
-
-        def _done(future):
-            result_holder[0] = future.result()
-            event.set()
-
-        self._from_ll_client.call_async(req).add_done_callback(_done)
-
-        if not event.wait(timeout=5.0):
-            self.get_logger().error(f'fromLL timed out for ({lat}, {lon}).')
-            return None
-
-        pt = result_holder[0].map_point
-        pose = PoseStamped()
-        pose.header.frame_id = 'map'
-        pose.header.stamp    = self.get_clock().now().to_msg()
-        pose.pose.position.x = pt.x
-        pose.pose.position.y = pt.y
-        pose.pose.position.z = 0.0
-        pose.pose.orientation.w = 1.0
-        return pose
 
     # ------------------------------------------------------------------ #
     #  Callbacks                                                           #
@@ -171,13 +199,12 @@ class TaskManagerNode(Node):
 
     def _cb_add_waypoint(self, msg: PoseStamped):
         self._queue.append(msg)
-        self.get_logger().info(
-            f'Waypoint enqueued. Queue length: {len(self._queue)}')
+        self.get_logger().info(f'Waypoint eklendi. Kuyruk: {len(self._queue)}')
         self._publish_status()
 
     def _cb_cancel(self, _: Empty):
         if self._current_goal_handle is not None:
-            self.get_logger().info('Canceling current navigation goal.')
+            self.get_logger().info('Mevcut navigasyon hedefi iptal ediliyor.')
             self._state = TaskState.CANCELING
             self._current_goal_handle.cancel_goal_async()
         self._queue.clear()
@@ -185,7 +212,7 @@ class TaskManagerNode(Node):
 
     def _srv_clear_queue(self, _req, response):
         self._queue.clear()
-        self.get_logger().info('Task queue cleared.')
+        self.get_logger().info('Kuyruk temizlendi.')
         response.success = True
         response.message = 'Queue cleared.'
         self._publish_status()
@@ -194,11 +221,11 @@ class TaskManagerNode(Node):
     def _srv_pause(self, req, response):
         if req.data:
             self._state = TaskState.PAUSED
-            self.get_logger().info('Task execution paused.')
+            self.get_logger().info('Görev duraklatıldı.')
         else:
             if self._state == TaskState.PAUSED:
                 self._state = TaskState.IDLE
-                self.get_logger().info('Task execution resumed.')
+                self.get_logger().info('Görev devam ediyor.')
         response.success = True
         response.message = f'State: {self._state.name}'
         self._publish_status()
@@ -218,7 +245,7 @@ class TaskManagerNode(Node):
 
         if isinstance(item, PoseStamped):
             if not self._nav_client.wait_for_server(timeout_sec=0.0):
-                self.get_logger().warn('NavigateToPose action server not available yet.')
+                self.get_logger().warn('NavigateToPose action server hazır değil.')
                 self._queue.appendleft(item)
                 return
             self._send_nav_goal(item)
@@ -234,7 +261,7 @@ class TaskManagerNode(Node):
         goal_msg.pose = pose
 
         self.get_logger().info(
-            f'Nav2 goal: x={pose.pose.position.x:.3f} y={pose.pose.position.y:.3f}')
+            f'Nav2 hedef: x={pose.pose.position.x:.3f} y={pose.pose.position.y:.3f}')
 
         send_future = self._nav_client.send_goal_async(
             goal_msg, feedback_callback=self._feedback_cb)
@@ -245,13 +272,12 @@ class TaskManagerNode(Node):
         msg = String()
         msg.data = cmd
         self._plow_pub.publish(msg)
-        self.get_logger().info(f'Plow command sent: {cmd}')
-        # Fire-and-forget; IDLE state is preserved so next item dispatches immediately
+        self.get_logger().info(f'Plow komutu: {cmd}')
 
     def _goal_response_cb(self, future):
         handle = future.result()
         if not handle.accepted:
-            self.get_logger().warn('Goal rejected by Nav2.')
+            self.get_logger().warn('Nav2 hedefi reddetti.')
             self._state = TaskState.IDLE
             self._publish_status()
             return
@@ -260,18 +286,16 @@ class TaskManagerNode(Node):
 
     def _result_cb(self, future):
         self._current_goal_handle = None
-
         if self._state == TaskState.CANCELING:
-            self.get_logger().info('Goal canceled.')
+            self.get_logger().info('Hedef iptal edildi.')
         else:
-            self.get_logger().info(f'Goal reached. Status: {future.result().status}')
-
+            self.get_logger().info(f'Hedefe ulaşıldı. Status: {future.result().status}')
         self._state = TaskState.IDLE
         self._publish_status()
 
     def _feedback_cb(self, feedback_msg):
         dist = feedback_msg.feedback.distance_remaining
-        self.get_logger().debug(f'Distance remaining: {dist:.2f} m')
+        self.get_logger().debug(f'Kalan mesafe: {dist:.2f} m')
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
