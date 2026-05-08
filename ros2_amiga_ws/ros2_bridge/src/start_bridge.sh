@@ -25,6 +25,9 @@ PID_IMU=$!
 python3 $SRC/cam_to_ros.py --service-config $CONFIG/cam_to_ros.json > "$LOG_DIR/camera.log" 2>&1 &
 PID_CAMERA=$!
 
+python3 $SRC/motor_battery.py --service-config $CONFIG/motor_battery.json > "$LOG_DIR/motor_battery.log" 2>&1 &
+PID_MOTOR=$!
+
 ros2 run ros2_bridge websocket_bridge > "$LOG_DIR/websocket_bridge.log" 2>&1 &
 PID_WS=$!
 
@@ -33,8 +36,9 @@ echo "GPS PID:             $PID_GPS"
 echo "Odometry PID:        $PID_ODO"
 echo "IMU PID:             $PID_IMU"
 echo "Camera PID:          $PID_CAMERA"
+echo "Motor/Battery PID:   $PID_MOTOR"
 echo "WebSocket Bridge PID:$PID_WS"
 echo "Press [CTRL+C] to stop."
 
-trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_WS 2>/dev/null; exit 0" SIGINT
+trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_WS 2>/dev/null; exit 0" SIGINT
 wait
