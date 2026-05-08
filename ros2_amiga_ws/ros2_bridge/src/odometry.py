@@ -52,6 +52,16 @@ class OdomPublisher(Node):
             odom_msg.twist.twist.linear.x = linear_x
             odom_msg.twist.twist.angular.z = angular_z
 
+            # [vx, vy, vz, wx, wy, wz] — diagonal indices: 0, 7, 14, 21, 28, 35
+            cov = [0.0] * 36
+            cov[0]  = 0.01   # vx — ölçülüyor
+            cov[7]  = 0.01   # vy — diferansiyel sürüş, sıfır olmalı
+            cov[14] = 1e6    # vz — bilinmiyor
+            cov[21] = 1e6    # wx
+            cov[28] = 1e6    # wy
+            cov[35] = 0.01   # wz — ölçülüyor
+            odom_msg.twist.covariance = cov
+
             # Orientation sabit (yaw = 0)
             q = quaternion_from_euler(0, 0, 0)
             odom_msg.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
