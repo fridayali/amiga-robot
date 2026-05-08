@@ -20,7 +20,7 @@ def generate_launch_description():
 
     rplidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_lidar, 'launch', 'rplidar.launch.py')
+            os.path.join(pkg_lidar, 'launch', 'rplidar_s2.launch.py')
         ),
         launch_arguments={
             'serial_port':     serial_port,
