@@ -1,1 +1,3 @@
 farm-ng-amiga
+websockets
+requests
