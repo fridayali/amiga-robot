@@ -30,6 +30,7 @@ class MultiClientSubscriber(Node):
         self._subscriptions = []                     # <-- Değiştirildi
         self.orientation: float = None
         self.pose: Pose3F64 = None
+        
 
         # ROS2 publishers
         self.pub_fix  = self.create_publisher(NavSatFix, "/gps/fix", 10)
@@ -78,6 +79,12 @@ class MultiClientSubscriber(Node):
                     NavSatStatus.STATUS_FIX if fix_ok else NavSatStatus.STATUS_NO_FIX
                 )
                 gps_msg.status.service = NavSatStatus.SERVICE_GPS
+                gps_msg.position_covariance = [
+                    4.0, 0.0, 0.0,
+                    0.0, 4.0, 0.0,
+                    0.0, 0.0, 9.0
+                ]
+                gps_msg.position_covariance_type = 2
                 self.pub_fix.publish(gps_msg)
 
                 # PoseStamped publish
@@ -106,7 +113,7 @@ class MultiClientSubscriber(Node):
                     from nav_msgs.msg import Odometry
                     odom_msg = Odometry()
                     odom_msg.header.stamp = self.get_clock().now().to_msg()
-                    odom_msg.header.frame_id = "map"
+                    odom_msg.header.frame_id = "odom"
                     odom_msg.child_frame_id = "base_link"
 
                     # Pozisyon (Kartezyen koordinatlar)
