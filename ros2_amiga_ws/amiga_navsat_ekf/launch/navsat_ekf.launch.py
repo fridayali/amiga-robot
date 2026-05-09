@@ -34,15 +34,15 @@ def generate_launch_description():
             remappings=[('odometry/filtered', '/odometry/filtered_global')],
         ),
 
-        Node(
-            package='robot_localization',
-            executable='navsat_transform_node',
-            name='navsat_transform_node',
-            output='screen',
-            parameters=[config_file, {'use_sim_time': use_sim_time}],
-            remappings=[
-            ('odometry/filtered', '/odometry/filtered_local'),
-            ('imu', '/imu/data'),
-            ],
-        ),
+        # Node(
+        #     package='robot_localization',
+        #     executable='navsat_transform_node',
+        #     name='navsat_transform_node',
+        #     output='screen',
+        #     parameters=[config_file, {'use_sim_time': use_sim_time}],
+        #     remappings=[
+        #     ('odometry/filtered', '/odometry/filtered_local'),
+        #     ('imu', '/imu/data'),
+        #     ],
+        # ),
     ])
