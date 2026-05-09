@@ -113,7 +113,7 @@ class MultiClientSubscriber(Node):
                     from nav_msgs.msg import Odometry
                     odom_msg = Odometry()
                     odom_msg.header.stamp = self.get_clock().now().to_msg()
-                    odom_msg.header.frame_id = "odom"
+                    odom_msg.header.frame_id = "map"
                     odom_msg.child_frame_id = "base_link"
 
                     # Pozisyon (Kartezyen koordinatlar)

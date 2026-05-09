@@ -18,7 +18,7 @@ ekf_local_node:
 
     odom1: /rtk/odom
     odom1_config: [false, false, false, # Pozisyon yok
-                   false, false, true,  # Sadece yaw
+                   false, false, false,  # Sadece yaw
                    false, false, false,
                    false, false, false,
                    false, false, false]
@@ -53,7 +53,7 @@ ekf_global_node:
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
-                   true,  true,  false,
+                   true,  false,  false,
                    false, false, false,
                    false, false, false]
     odom0_queue_size: 10
