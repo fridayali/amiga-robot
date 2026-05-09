@@ -6,14 +6,15 @@ Mission JSON formatı (/mission_segments):
   {
     "mission_id": "...",
     "segments_json": [
-      {"order_index": 0, "action": "move",      "latitude": ..., "longitude": ..., "track_path": "(opsiyonel)"},
+      {"order_index": 0, "action": "move", "gpsWaypoints": [{"latitude":..., "longitude":..., "altitude":...}]},
       {"order_index": 1, "action": "plow_down", "duration": 12},
-      {"order_index": 2, "action": "move",      "latitude": ..., "longitude": ...},
+      {"order_index": 2, "action": "move", "latitude": ..., "longitude": ...},
       {"order_index": 3, "action": "plow_up",   "duration": 14}
     ]
   }
 
-  track_path verilirse o dosyayı yükler; verilmezse GPS → ENU dönüşümü ile track oluşturur.
+  track_path verilirse o dosyayı okur ve içeriğini track_executor'a iletir.
+  gpsWaypoints verilirse doğrudan track_executor'a JSON olarak gönderir.
 
 Topics subscribed:
   /mission_segments      (std_msgs/String)  — JSON mission
@@ -25,6 +26,11 @@ Topics published:
 Services:
   /task_manager/clear_queue (std_srvs/Trigger)  — kuyruğu temizle + iptal et
   /task_manager/pause       (std_srvs/SetBool)  — duraklat / devam et
+
+Parametreler:
+  track_follower_config  — track follower servis config JSON yolu
+  track_executor_python  — farm-ng venv python3 tam yolu
+  track_executor_script  — track_executor.py tam yolu
 """
 
 import asyncio
@@ -41,34 +47,9 @@ from std_msgs.msg import String
 from std_msgs.msg import Empty as RosEmpty
 from std_srvs.srv import Trigger, SetBool
 
-from farm_ng.core.event_client import EventClient
-from farm_ng.core.event_service_pb2 import EventServiceConfig
-from farm_ng.core.events_file_reader import proto_from_json_file
-from farm_ng.track.track_pb2 import Track, TrackFollowRequest, TRACK_COMPLETE
-from google.protobuf.empty_pb2 import Empty as ProtoEmpty
-
 # Varsayılan plow süreleri (segment'te "duration" yoksa bunlar kullanılır)
 _PLOW_DOWN_SEC = 12.0
 _PLOW_UP_SEC   = 14.0
-
-
-def _build_track_from_gps(waypoints: list[dict]) -> Track:
-    """
-    GPS waypoint listesinden farm-ng Track oluşturur.
-    Her eleman: {"latitude": ..., "longitude": ..., "altitude": ..., "heading": ...}
-    """
-    track = Track()
-    for wp_data in waypoints:
-        wp = track.gps_waypoints.add()
-        wp.latitude  = wp_data['latitude']
-        wp.longitude = wp_data['longitude']
-        wp.altitude  = float(wp_data.get('altitude', 0.0))
-        wp.heading   = float(wp_data.get('heading', 0.0))
-    return track
-
-
-def _load_track_from_file(path: str) -> Track:
-    return proto_from_json_file(Path(path), Track())
 
 
 class TaskManagerNode(Node):
@@ -81,6 +62,12 @@ class TaskManagerNode(Node):
         self.declare_parameter(
             'track_follower_config',
             '/ros2_amiga_ws/src/ros2_bridge/config/track_follower.json')
+        self.declare_parameter(
+            'track_executor_python',
+            '/home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/venv/bin/python3')
+        self.declare_parameter(
+            'track_executor_script',
+            '/ros2_amiga_ws/src/ros2_bridge/src/track_executor.py')
 
         # Publishers
         self._status_pub = self.create_publisher(String, '/task_manager/status', 10)
@@ -97,12 +84,12 @@ class TaskManagerNode(Node):
         self.create_service(Trigger, '/task_manager/clear_queue', self._srv_clear)
         self.create_service(SetBool, '/task_manager/pause',       self._srv_pause)
 
-        # Asyncio loop (farm-ng tüm operasyonları burada çalışır)
+        # Asyncio loop
         self._loop:          asyncio.AbstractEventLoop = asyncio.new_event_loop()
         self._mission_queue: asyncio.Queue | None      = None
         self._cancel_event:  asyncio.Event | None      = None
         self._pause_event:   asyncio.Event | None      = None
-        self._tf_config:     EventServiceConfig | None = None
+        self._move_proc:     asyncio.subprocess.Process | None = None
 
         threading.Thread(target=self._run_async_loop, daemon=True).start()
 
@@ -122,11 +109,14 @@ class TaskManagerNode(Node):
         self._pause_event   = asyncio.Event()
         self._pause_event.set()  # başlangıçta çalışıyor
 
-        cfg_path = self.get_parameter('track_follower_config').value
-        self._tf_config = proto_from_json_file(Path(cfg_path), EventServiceConfig())
+        cfg  = self.get_parameter('track_follower_config').value
+        py   = self.get_parameter('track_executor_python').value
+        scr  = self.get_parameter('track_executor_script').value
 
         self.get_logger().info(
-            f'Track follower config: {cfg_path}\n'
+            f'track_follower_config : {cfg}\n'
+            f'track_executor_python : {py}\n'
+            f'track_executor_script : {scr}\n'
             f'Mission bekleniyor...')
 
         await self._mission_loop()
@@ -159,12 +149,10 @@ class TaskManagerNode(Node):
 
         for i, seg in enumerate(segments):
 
-            # İptal kontrolü
             if self._cancel_event.is_set():
                 self.get_logger().info('Mission iptal edildi.')
                 return
 
-            # Pause bekle
             await self._pause_event.wait()
 
             action = seg.get('action', '').lower()
@@ -173,7 +161,7 @@ class TaskManagerNode(Node):
                 f'──────────────────────────')
 
             if action == 'move':
-                await self._step_move(seg, i + 1, total)
+                await self._step_move(seg)
 
             elif action == 'plow_down':
                 dur = float(seg.get('duration', _PLOW_DOWN_SEC))
@@ -195,17 +183,17 @@ class TaskManagerNode(Node):
             '╚══════════════════════════════════╝')
 
     # ──────────────────────────────────────────────────
-    #  Adım: Move
+    #  Adım: Move  (track_executor.py aracılığıyla)
     # ──────────────────────────────────────────────────
 
-    async def _step_move(self, seg: dict, step: int, total: int):
+    async def _step_move(self, seg: dict):
         track_path = seg.get('track_path')
 
         if track_path:
             self.get_logger().info(f'│  Track dosyası: {track_path}')
-            track = _load_track_from_file(track_path)
+            track_json = Path(track_path).read_text()
+            track_data = json.loads(track_json)
         else:
-            # Tek nokta veya çoklu GPS waypoint listesi
             gps_wps = seg.get('gpsWaypoints') or [
                 {'latitude': seg['latitude'], 'longitude': seg['longitude'],
                  'altitude': seg.get('altitude', 0.0)}
@@ -215,37 +203,50 @@ class TaskManagerNode(Node):
                 '\n'.join(
                     f'│    [{i}] lat={w["latitude"]:.7f}  lon={w["longitude"]:.7f}'
                     for i, w in enumerate(gps_wps)))
-            track = _build_track_from_gps(gps_wps)
+            track_data = {'gpsWaypoints': gps_wps}
 
-        client = EventClient(self._tf_config)
+        cfg = self.get_parameter('track_follower_config').value
+        py  = self.get_parameter('track_executor_python').value
+        scr = self.get_parameter('track_executor_script').value
 
-        self.get_logger().info('│  → /set_track gönderiliyor...')
-        await client.request_reply('/set_track', TrackFollowRequest(track=track))
+        stdin_bytes = json.dumps(track_data).encode()
 
-        self.get_logger().info('│  → /start gönderiliyor...')
-        await client.request_reply('/start', ProtoEmpty())
+        self.get_logger().info('│  → track_executor başlatılıyor...')
 
-        self.get_logger().info('│  Track execute ediliyor, tamamlanması bekleniyor...')
-        await self._wait_track_complete()
+        proc = await asyncio.create_subprocess_exec(
+            py, scr, cfg,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        self._move_proc = proc
 
-        self.get_logger().info('│  ✓ Hedefe ulaşıldı.')
+        # İptal izle + stdout/stderr aktar
+        async def _relay_stderr():
+            async for line in proc.stderr:
+                self.get_logger().info('│  [executor] ' + line.decode().rstrip())
 
-    async def _wait_track_complete(self):
-        client = EventClient(self._tf_config)
-        async for _ev, msg in client.subscribe(
-                self._tf_config.subscriptions[0], decode=True):
+        relay_task = asyncio.ensure_future(_relay_stderr())
 
-            if self._cancel_event.is_set():
-                self.get_logger().info('│  Track izleme iptal edildi.')
-                return
+        try:
+            await asyncio.wait_for(
+                proc.communicate(input=stdin_bytes),
+                timeout=None  # süresiz bekle
+            )
+        except asyncio.CancelledError:
+            proc.terminate()
+            raise
+        finally:
+            relay_task.cancel()
+            self._move_proc = None
 
-            try:
-                if msg.status.track_status == TRACK_COMPLETE:
-                    return
-                self.get_logger().debug(
-                    f'│  Kalan mesafe: {msg.progress.distance_remaining:.2f} m')
-            except Exception:
-                pass
+        rc = proc.returncode
+        if rc == 0:
+            self.get_logger().info('│  ✓ Hedefe ulaşıldı.')
+        elif rc == 2:
+            self.get_logger().info('│  Track iptal edildi.')
+        else:
+            raise RuntimeError(f'track_executor hata kodu: {rc}')
 
     # ──────────────────────────────────────────────────
     #  Adım: Plow
@@ -294,7 +295,7 @@ class TaskManagerNode(Node):
             f'Mission alındı → id={mid}  adım={len(segments)}\n'
             + '\n'.join(
                 f'  [{s["order_index"]}] {s["action"]}'
-                + (f' lat={s["latitude"]:.6f} lon={s["longitude"]:.6f}'
+                + (f' ({len(s.get("gpsWaypoints", []))} wp)'
                    if s["action"] == "move" else
                    f' dur={s.get("duration", "default")}s')
                 for s in segments))
@@ -309,12 +310,17 @@ class TaskManagerNode(Node):
     def _cb_cancel(self, _: RosEmpty):
         if self._cancel_event:
             self._cancel_event.set()
+        # Çalışan move process'i sonlandır
+        if self._move_proc and self._move_proc.returncode is None:
+            self._move_proc.terminate()
         self.get_logger().info('İPTAL sinyali alındı.')
         self._publish_status('CANCELING', 0)
 
     def _srv_clear(self, _req, response):
         if self._cancel_event:
             self._cancel_event.set()
+        if self._move_proc and self._move_proc.returncode is None:
+            self._move_proc.terminate()
         if self._mission_queue:
             while not self._mission_queue.empty():
                 try:
