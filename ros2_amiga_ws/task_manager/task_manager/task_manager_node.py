@@ -79,7 +79,7 @@ class TaskManagerNode(Node):
 
         self.declare_parameter(
             'track_follower_config',
-            '/home/cuma_karaaslan/farm-ng-amiga/py/examples/track_follower/service_config.json')
+            '/ros2_amiga_ws/src/ros2_bridge/config/track_follower.json')
 
         # Publishers
         self._status_pub = self.create_publisher(String, '/task_manager/status', 10)

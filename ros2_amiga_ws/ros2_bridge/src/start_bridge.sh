@@ -31,6 +31,10 @@ PID_MOTOR=$!
 ros2 run ros2_bridge websocket_bridge > "$LOG_DIR/websocket_bridge.log" 2>&1 &
 PID_WS=$!
 
+ros2 run task_manager task_manager_node \
+  --ros-args -p track_follower_config:=$CONFIG/track_follower.json > "$LOG_DIR/task_manager.log" 2>&1 &
+PID_TM=$!
+
 echo "Control PID:         $PID_CONTROL"
 echo "GPS PID:             $PID_GPS"
 echo "Odometry PID:        $PID_ODO"
@@ -38,7 +42,8 @@ echo "IMU PID:             $PID_IMU"
 echo "Camera PID:          $PID_CAMERA"
 echo "Motor/Battery PID:   $PID_MOTOR"
 echo "WebSocket Bridge PID:$PID_WS"
+echo "Task Manager PID:    $PID_TM"
 echo "Press [CTRL+C] to stop."
 
-trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_WS 2>/dev/null; exit 0" SIGINT
+trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_WS $PID_TM 2>/dev/null; exit 0" SIGINT
 wait
