@@ -126,7 +126,6 @@ class TaskManagerNode(Node):
 
         self.get_logger().info(
             f'Track follower config: {cfg_path}\n'
-            f'Datum: lat={_DATUM_LAT}  lon={_DATUM_LON}\n'
             f'Mission bekleniyor...')
 
         await self._mission_loop()

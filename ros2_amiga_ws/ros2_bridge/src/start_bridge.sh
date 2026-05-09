@@ -32,7 +32,7 @@ ros2 run ros2_bridge websocket_bridge > "$LOG_DIR/websocket_bridge.log" 2>&1 &
 PID_WS=$!
 
 ros2 run task_manager task_manager_node \
-  --ros-args -p track_follower_config:=$CONFIG/track_follower.json > "$LOG_DIR/task_manager.log" 2>&1 &
+  --ros-args -p "track_follower_config:=$CONFIG/track_follower.json" > "$LOG_DIR/task_manager.log" 2>&1 &
 PID_TM=$!
 
 echo "Control PID:         $PID_CONTROL"
