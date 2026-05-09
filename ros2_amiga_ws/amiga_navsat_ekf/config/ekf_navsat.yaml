@@ -18,7 +18,7 @@ ekf_local_node:
 
     odom1: /rtk/odom
     odom1_config: [false, false, false, # Pozisyon yok
-                   false, false, false,  # Sadece yaw
+                   false, false, true,  # Sadece yaw
                    false, false, false,
                    false, false, false,
                    false, false, false]
