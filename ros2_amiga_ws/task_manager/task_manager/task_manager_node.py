@@ -29,7 +29,6 @@ Services:
 
 import asyncio
 import json
-import math
 import threading
 import time
 from pathlib import Path
@@ -48,29 +47,22 @@ from farm_ng.core.events_file_reader import proto_from_json_file
 from farm_ng.track.track_pb2 import Track, TrackFollowRequest, TRACK_COMPLETE
 from google.protobuf.empty_pb2 import Empty as ProtoEmpty
 
-# navsat_transform datum ile aynı — ENU referans noktası
-_DATUM_LAT = 39.79609718
-_DATUM_LON = 32.53153558
-
 # Varsayılan plow süreleri (segment'te "duration" yoksa bunlar kullanılır)
 _PLOW_DOWN_SEC = 12.0
 _PLOW_UP_SEC   = 14.0
 
 
-def _gps_to_enu(lat: float, lon: float) -> tuple[float, float]:
-    R = 6378137.0
-    dx = R * math.radians(lon - _DATUM_LON) * math.cos(math.radians(_DATUM_LAT))
-    dy = R * math.radians(lat - _DATUM_LAT)
-    return dx, dy
-
-
-def _build_track_from_enu(x: float, y: float) -> Track:
-    """ENU koordinatından tek noktalı Track oluşturur."""
+def _build_track_from_gps(waypoints: list[dict]) -> Track:
+    """
+    GPS waypoint listesinden farm-ng Track oluşturur.
+    Her eleman: {"latitude": ..., "longitude": ..., "altitude": ...}
+    """
     track = Track()
-    wp = track.waypoints.add()
-    wp.x       = x
-    wp.y       = y
-    wp.heading = 0.0
+    for wp_data in waypoints:
+        wp = track.gpsWaypoints.add()
+        wp.latitude  = wp_data['latitude']
+        wp.longitude = wp_data['longitude']
+        wp.altitude  = float(wp_data.get('altitude', 0.0))
     return track
 
 
@@ -213,13 +205,17 @@ class TaskManagerNode(Node):
             self.get_logger().info(f'│  Track dosyası: {track_path}')
             track = _load_track_from_file(track_path)
         else:
-            lat = seg['latitude']
-            lon = seg['longitude']
-            dx, dy = _gps_to_enu(lat, lon)
+            # Tek nokta veya çoklu GPS waypoint listesi
+            gps_wps = seg.get('gpsWaypoints') or [
+                {'latitude': seg['latitude'], 'longitude': seg['longitude'],
+                 'altitude': seg.get('altitude', 0.0)}
+            ]
             self.get_logger().info(
-                f'│  GPS : lat={lat:.7f}  lon={lon:.7f}\n'
-                f'│  ENU : x={dx:.3f} m  y={dy:.3f} m')
-            track = _build_track_from_enu(dx, dy)
+                f'│  GPS waypoints ({len(gps_wps)} nokta):\n' +
+                '\n'.join(
+                    f'│    [{i}] lat={w["latitude"]:.7f}  lon={w["longitude"]:.7f}'
+                    for i, w in enumerate(gps_wps)))
+            track = _build_track_from_gps(gps_wps)
 
         client = EventClient(self._tf_config)
 
