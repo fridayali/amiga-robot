@@ -64,7 +64,7 @@ class TaskManagerNode(Node):
             '/ros2_amiga_ws/src/ros2_bridge/config/track_follower.json')
         self.declare_parameter(
             'track_executor_python',
-            '/home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/venv/bin/python3')
+            '/host-venv/bin/python3')
         self.declare_parameter(
             'track_executor_script',
             '/ros2_amiga_ws/src/ros2_bridge/src/track_executor.py')
