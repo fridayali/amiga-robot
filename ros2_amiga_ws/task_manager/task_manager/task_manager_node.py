@@ -55,14 +55,15 @@ _PLOW_UP_SEC   = 14.0
 def _build_track_from_gps(waypoints: list[dict]) -> Track:
     """
     GPS waypoint listesinden farm-ng Track oluşturur.
-    Her eleman: {"latitude": ..., "longitude": ..., "altitude": ...}
+    Her eleman: {"latitude": ..., "longitude": ..., "altitude": ..., "heading": ...}
     """
     track = Track()
     for wp_data in waypoints:
-        wp = track.gpsWaypoints.add()
+        wp = track.gps_waypoints.add()
         wp.latitude  = wp_data['latitude']
         wp.longitude = wp_data['longitude']
         wp.altitude  = float(wp_data.get('altitude', 0.0))
+        wp.heading   = float(wp_data.get('heading', 0.0))
     return track
 
 
@@ -241,9 +242,8 @@ class TaskManagerNode(Node):
             try:
                 if msg.status.track_status == TRACK_COMPLETE:
                     return
-                dist = getattr(msg, 'distance_remaining', None)
-                if dist is not None:
-                    self.get_logger().debug(f'│  Kalan mesafe: {dist:.2f} m')
+                self.get_logger().debug(
+                    f'│  Kalan mesafe: {msg.progress.distance_remaining:.2f} m')
             except Exception:
                 pass
 
