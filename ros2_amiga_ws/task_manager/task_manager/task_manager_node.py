@@ -216,29 +216,21 @@ class TaskManagerNode(Node):
         proc = await asyncio.create_subprocess_exec(
             py, scr, cfg,
             stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
         self._move_proc = proc
 
-        # İptal izle + stdout/stderr aktar
-        async def _relay_stderr():
-            async for line in proc.stderr:
-                self.get_logger().info('│  [executor] ' + line.decode().rstrip())
-
-        relay_task = asyncio.ensure_future(_relay_stderr())
-
         try:
-            await asyncio.wait_for(
-                proc.communicate(input=stdin_bytes),
-                timeout=None  # süresiz bekle
-            )
+            _, stderr_bytes = await proc.communicate(input=stdin_bytes)
         except asyncio.CancelledError:
             proc.terminate()
             raise
         finally:
-            relay_task.cancel()
             self._move_proc = None
+
+        for line in (stderr_bytes or b'').decode().splitlines():
+            self.get_logger().info('│  [executor] ' + line)
 
         rc = proc.returncode
         if rc == 0:
