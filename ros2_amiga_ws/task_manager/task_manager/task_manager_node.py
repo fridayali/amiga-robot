@@ -43,7 +43,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
 
-from std_msgs.msg import String
+from std_msgs.msg import String, Int8
 from std_msgs.msg import Empty as RosEmpty
 from std_srvs.srv import Trigger, SetBool
 
@@ -73,7 +73,8 @@ class TaskManagerNode(Node):
             '/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/py')
 
         # Publishers
-        self._status_pub = self.create_publisher(String, '/task_manager/status', 10)
+        self._status_pub  = self.create_publisher(String, '/task_manager/status', 10)
+        self._hbridge_pub = self.create_publisher(Int8,   '/hbridge', 10)
 
         # Subscribers
         self.create_subscription(String, '/mission_segments',
@@ -177,14 +178,14 @@ class TaskManagerNode(Node):
             elif action == 'plow_down':
                 dur = float(segments[i].get('duration', _PLOW_DOWN_SEC))
                 self.get_logger().info('┌─ PLOW_DOWN ──────────────────────────')
-                await self._step_plow('forward', dur, 'DOWN')
+                await self._step_plow(1, dur, 'DOWN')
                 self.get_logger().info('└─ PLOW_DOWN tamamlandı.')
                 i += 1
 
             elif action == 'plow_up':
                 dur = float(segments[i].get('duration', _PLOW_UP_SEC))
                 self.get_logger().info('┌─ PLOW_UP ──────────────────────────')
-                await self._step_plow('reverse', dur, 'UP')
+                await self._step_plow(-1, dur, 'UP')
                 self.get_logger().info('└─ PLOW_UP tamamlandı.')
                 i += 1
 
@@ -288,21 +289,25 @@ class TaskManagerNode(Node):
     #  Adım: Plow
     # ──────────────────────────────────────────────────
 
-    async def _step_plow(self, direction: str, duration: float, label: str):
-        from tool_control.main import send_hbridge_command
-
+    async def _step_plow(self, command: int, duration: float, label: str):
         self.get_logger().info(
-            f'│  Tool {label} başlıyor — yön={direction}  süre={duration:.1f}s')
+            f'│  Tool {label} başlıyor — komut={command:+d}  süre={duration:.1f}s')
 
+        msg = Int8()
         start = time.time()
         while time.time() - start < duration:
             if self._cancel_event.is_set():
                 self.get_logger().info('│  Plow komutu iptal edildi.')
                 break
-            await send_hbridge_command(direction)
+            msg.data = command
+            self._hbridge_pub.publish(msg)
             await asyncio.sleep(0.1)
 
-        await send_hbridge_command('stop')
+        msg.data = 0
+        for _ in range(5):
+            self._hbridge_pub.publish(msg)
+            await asyncio.sleep(0.05)
+
         elapsed = time.time() - start
         self.get_logger().info(
             f'│  ✓ Tool {label} tamamlandı ({elapsed:.1f}s çalıştı).')
