@@ -149,8 +149,9 @@ class TaskManagerNode(Node):
 
     async def _execute_mission(self, segments: list):
         total = len(segments)
+        i = 0
 
-        for i, seg in enumerate(segments):
+        while i < total:
 
             if self._cancel_event.is_set():
                 self.get_logger().info('Mission iptal edildi.')
@@ -158,27 +159,39 @@ class TaskManagerNode(Node):
 
             await self._pause_event.wait()
 
-            action = seg.get('action', '').lower()
-            self.get_logger().info(
-                f'┌─ Adım {i+1}/{total}: [{action.upper()}] '
-                f'──────────────────────────')
+            action = segments[i].get('action', '').lower()
 
             if action == 'move':
-                await self._step_move(seg)
+                # Ardışık move segmentlerini tek track olarak birleştir
+                move_segs = []
+                while i < total and segments[i].get('action', '').lower() == 'move':
+                    move_segs.append(segments[i])
+                    i += 1
+
+                self.get_logger().info(
+                    f'┌─ MOVE — {len(move_segs)} segment → tek track '
+                    f'──────────────────────────')
+                await self._step_move(move_segs)
+                self.get_logger().info('└─ MOVE tamamlandı.')
 
             elif action == 'plow_down':
-                dur = float(seg.get('duration', _PLOW_DOWN_SEC))
+                dur = float(segments[i].get('duration', _PLOW_DOWN_SEC))
+                self.get_logger().info('┌─ PLOW_DOWN ──────────────────────────')
                 await self._step_plow('forward', dur, 'DOWN')
+                self.get_logger().info('└─ PLOW_DOWN tamamlandı.')
+                i += 1
 
             elif action == 'plow_up':
-                dur = float(seg.get('duration', _PLOW_UP_SEC))
+                dur = float(segments[i].get('duration', _PLOW_UP_SEC))
+                self.get_logger().info('┌─ PLOW_UP ──────────────────────────')
                 await self._step_plow('reverse', dur, 'UP')
+                self.get_logger().info('└─ PLOW_UP tamamlandı.')
+                i += 1
 
             else:
-                self.get_logger().warn(f'└─ Bilinmeyen action "{action}", atlandı.')
-                continue
-
-            self.get_logger().info(f'└─ Adım {i+1}/{total} tamamlandı.')
+                self.get_logger().warn(
+                    f'Bilinmeyen action "{action}", atlandı.')
+                i += 1
 
         self.get_logger().info(
             '╔══════════════════════════════════╗\n'
@@ -189,24 +202,29 @@ class TaskManagerNode(Node):
     #  Adım: Move  (track_executor.py aracılığıyla)
     # ──────────────────────────────────────────────────
 
-    async def _step_move(self, seg: dict):
-        track_path = seg.get('track_path')
+    async def _step_move(self, move_segs: list):
+        # track_path varsa ilk segmentten al (dosya bazlı track)
+        track_path = move_segs[0].get('track_path') if len(move_segs) == 1 else None
 
         if track_path:
             self.get_logger().info(f'│  Track dosyası: {track_path}')
-            track_json = Path(track_path).read_text()
-            track_data = json.loads(track_json)
+            track_data = json.loads(Path(track_path).read_text())
         else:
-            gps_wps = seg.get('gpsWaypoints') or [
-                {'latitude': seg['latitude'], 'longitude': seg['longitude'],
-                 'altitude': seg.get('altitude', 0.0)}
-            ]
+            # Tüm segmentlerin GPS waypointlerini birleştir
+            all_wps = []
+            for seg in move_segs:
+                wps = seg.get('gpsWaypoints') or [
+                    {'latitude': seg['latitude'], 'longitude': seg['longitude'],
+                     'altitude': seg.get('altitude', 0.0)}
+                ]
+                all_wps.extend(wps)
+
             self.get_logger().info(
-                f'│  GPS waypoints ({len(gps_wps)} nokta):\n' +
+                f'│  GPS waypoints ({len(all_wps)} nokta):\n' +
                 '\n'.join(
                     f'│    [{i}] lat={w["latitude"]:.7f}  lon={w["longitude"]:.7f}'
-                    for i, w in enumerate(gps_wps)))
-            track_data = {'gpsWaypoints': gps_wps}
+                    for i, w in enumerate(all_wps)))
+            track_data = {'gpsWaypoints': all_wps}
 
         cfg = self.get_parameter('track_follower_config').value
         py  = self.get_parameter('track_executor_python').value
