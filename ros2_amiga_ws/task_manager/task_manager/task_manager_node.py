@@ -250,16 +250,31 @@ class TaskManagerNode(Node):
         )
         self._move_proc = proc
 
+        # stdin'i yaz ve kapat
+        proc.stdin.write(stdin_bytes)
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+        # stderr'i gerçek zamanlı logla
+        async def _stream_stderr():
+            async for line in proc.stderr:
+                self.get_logger().info('│  [executor] ' + line.decode().rstrip())
+
+        stderr_task = asyncio.ensure_future(_stream_stderr())
+
         try:
-            _, stderr_bytes = await proc.communicate(input=stdin_bytes)
+            await proc.wait()
         except asyncio.CancelledError:
             proc.terminate()
+            await proc.wait()
             raise
         finally:
+            stderr_task.cancel()
+            try:
+                await stderr_task
+            except asyncio.CancelledError:
+                pass
             self._move_proc = None
-
-        for line in (stderr_bytes or b'').decode().splitlines():
-            self.get_logger().info('│  [executor] ' + line)
 
         rc = proc.returncode
         if rc == 0:
