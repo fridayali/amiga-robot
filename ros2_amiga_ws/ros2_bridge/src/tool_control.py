@@ -87,11 +87,13 @@ async def control_hbridge(ros_node, config_path: str):
 
             print("STOP")
 
-        await client.request_reply(
-            "/control_tools",
-            commands,
-            decode=True
-        )
+        try:
+            await asyncio.wait_for(
+                client.request_reply("/control_tools", commands, decode=True),
+                timeout=0.08,
+            )
+        except (asyncio.TimeoutError, Exception):
+            pass
 
         await asyncio.sleep(0.1)
 
