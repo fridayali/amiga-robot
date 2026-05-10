@@ -213,11 +213,17 @@ class TaskManagerNode(Node):
 
         self.get_logger().info('│  → track_executor başlatılıyor...')
 
+        # ROS2'nin PYTHONPATH'i Python 3.8 venv'ini bozuyor; temiz env gönder
+        import os
+        clean_env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'),
+                     'HOME': os.environ.get('HOME', '/root')}
+
         proc = await asyncio.create_subprocess_exec(
             py, scr, cfg,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
+            env=clean_env,
         )
         self._move_proc = proc
 
