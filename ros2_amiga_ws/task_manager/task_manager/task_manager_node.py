@@ -64,10 +64,13 @@ class TaskManagerNode(Node):
             '/ros2_amiga_ws/src/ros2_bridge/config/track_follower.json')
         self.declare_parameter(
             'track_executor_python',
-            '/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/venv/bin/python3')
+            '/usr/bin/python3')
         self.declare_parameter(
             'track_executor_script',
             '/ros2_amiga_ws/src/ros2_bridge/src/track_executor.py')
+        self.declare_parameter(
+            'farm_ng_py_path',
+            '/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/py')
 
         # Publishers
         self._status_pub = self.create_publisher(String, '/task_manager/status', 10)
@@ -213,10 +216,12 @@ class TaskManagerNode(Node):
 
         self.get_logger().info('│  → track_executor başlatılıyor...')
 
-        # ROS2'nin PYTHONPATH'i Python 3.8 venv'ini bozuyor; temiz env gönder
+        # ROS2 PYTHONPATH'ini temizle, host farm_ng kaynağını ekle
         import os
+        farm_ng_py = self.get_parameter('farm_ng_py_path').value
         clean_env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'),
-                     'HOME': os.environ.get('HOME', '/root')}
+                     'HOME': os.environ.get('HOME', '/root'),
+                     'PYTHONPATH': farm_ng_py}
 
         proc = await asyncio.create_subprocess_exec(
             py, scr, cfg,
