@@ -35,7 +35,7 @@ ros2 run task_manager task_manager_node \
   --ros-args -p "track_follower_config:=$CONFIG/track_follower.json" > "$LOG_DIR/task_manager.log" 2>&1 &
 PID_TM=$!
 
-PYTHONPATH=/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/py \
+PYTHONPATH=/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/py:$PYTHONPATH \
 python3 $SRC/tool_control.py $CONFIG/tool_control.json > "$LOG_DIR/tool_control.log" 2>&1 &
 PID_TOOL=$!
 
