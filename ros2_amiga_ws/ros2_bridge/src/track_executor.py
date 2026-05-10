@@ -66,6 +66,8 @@ async def _run(config_path: str):
         print('[track_executor] /start gönderildi, tamamlanma bekleniyor...',
               file=sys.stderr)
 
+        _last_controllable = True
+
         async for _ev, msg in client.subscribe(config.subscriptions[0], decode=True):
             status = msg.status.track_status
 
@@ -81,6 +83,16 @@ async def _run(config_path: str):
                         print(f'[track_executor]   {_FAILURE_MODES.get(fm, f"UNKNOWN_{fm}")}',
                               file=sys.stderr)
                 return 1
+
+            # Robot kontrolsüz olunca / tekrar kontrolsüz olunca logla
+            rs = msg.status.robot_status
+            if not rs.controllable and _last_controllable:
+                modes = ', '.join(_FAILURE_MODES.get(fm, f'UNKNOWN_{fm}')
+                                  for fm in rs.failure_modes)
+                print(f'[track_executor] UYARI: Robot kontrolsüz — {modes}', file=sys.stderr)
+            elif rs.controllable and not _last_controllable:
+                print('[track_executor] Robot tekrar kontrol edilebilir.', file=sys.stderr)
+            _last_controllable = rs.controllable
 
             try:
                 rem = msg.progress.distance_remaining
