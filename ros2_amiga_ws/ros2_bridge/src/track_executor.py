@@ -25,6 +25,10 @@ from farm_ng.track.track_pb2 import Track, TrackFollowerState, TrackFollowReques
 from google.protobuf.empty_pb2 import Empty as ProtoEmpty
 from google.protobuf import json_format
 
+_TERMINAL = {6: 'TRACK_FAILED', 7: 'TRACK_ABORTED', 8: 'TRACK_CANCELLED'}
+_FAILURE_MODES = {10: 'CANBUS_TIMEOUT', 11: 'AUTO_MODE_DISABLED',
+                  12: 'CANBUS_SEND_ERROR', 20: 'FILTER_TIMEOUT', 21: 'FILTER_DIVERGED'}
+
 
 def _build_track(track_data: dict) -> Track:
     return json_format.ParseDict(track_data, Track())
@@ -64,9 +68,20 @@ async def _run(config_path: str):
 
         async for _ev, msg in client.subscribe(config.subscriptions[0], decode=True):
             status = msg.status.track_status
+
             if status == TRACK_COMPLETE:
-                print('[track_executor] TRACK_COMPLETE — başarılı', file=sys.stderr)
+                print('[track_executor] TRACK_COMPLETE ✓', file=sys.stderr)
                 return 0
+
+            if status in _TERMINAL:
+                print(f'[track_executor] Terminal durum: {_TERMINAL[status]}', file=sys.stderr)
+                rs = msg.status.robot_status
+                if not rs.controllable:
+                    for fm in rs.failure_modes:
+                        print(f'[track_executor]   {_FAILURE_MODES.get(fm, f"UNKNOWN_{fm}")}',
+                              file=sys.stderr)
+                return 1
+
             try:
                 rem = msg.progress.distance_remaining
                 print(f'[track_executor] kalan: {rem:.2f} m', file=sys.stderr)
