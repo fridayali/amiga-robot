@@ -35,6 +35,10 @@ ros2 run task_manager task_manager_node \
   --ros-args -p "track_follower_config:=$CONFIG/track_follower.json" > "$LOG_DIR/task_manager.log" 2>&1 &
 PID_TM=$!
 
+PYTHONPATH=/mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/py \
+python3 $SRC/tool_control.py $CONFIG/tool_control.json > "$LOG_DIR/tool_control.log" 2>&1 &
+PID_TOOL=$!
+
 echo "Control PID:         $PID_CONTROL"
 echo "GPS PID:             $PID_GPS"
 echo "Odometry PID:        $PID_ODO"
@@ -43,7 +47,8 @@ echo "Camera PID:          $PID_CAMERA"
 echo "Motor/Battery PID:   $PID_MOTOR"
 echo "WebSocket Bridge PID:$PID_WS"
 echo "Task Manager PID:    $PID_TM"
+echo "Tool Control PID:    $PID_TOOL"
 echo "Press [CTRL+C] to stop."
 
-trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_WS $PID_TM 2>/dev/null; exit 0" SIGINT
+trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_WS $PID_TM $PID_TOOL 2>/dev/null; exit 0" SIGINT
 wait
