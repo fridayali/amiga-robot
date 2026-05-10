@@ -21,20 +21,13 @@ from pathlib import Path
 from farm_ng.core.event_client import EventClient
 from farm_ng.core.event_service_pb2 import EventServiceConfig
 from farm_ng.core.events_file_reader import proto_from_json_file
-from farm_ng.track.track_pb2 import Track, TrackFollowRequest, TRACK_COMPLETE
+from farm_ng.track.track_pb2 import Track, TrackFollowerState, TrackFollowRequest, TRACK_COMPLETE
 from google.protobuf.empty_pb2 import Empty as ProtoEmpty
 from google.protobuf import json_format
 
 
 def _build_track(track_data: dict) -> Track:
-    track = Track()
-    for wp_data in track_data.get('gpsWaypoints', []):
-        wp = track.gps_waypoints.add()
-        wp.latitude  = float(wp_data['latitude'])
-        wp.longitude = float(wp_data['longitude'])
-        wp.altitude  = float(wp_data.get('altitude', 0.0))
-        wp.heading   = float(wp_data.get('heading', 0.0))
-    return track
+    return json_format.ParseDict(track_data, Track())
 
 
 async def _run(config_path: str):
