@@ -17,7 +17,7 @@ services:
       - /dev:/dev
       - /tmp/.X11-unix:/tmp/.X11-unix    # opsiyonel: RViz için
       - /mnt/managed_home/farm-ng-user-ertugrulkalkan/amiga-robot/ros2_amiga_ws:/ros2_amiga_ws/src   # kaynak kod canlı mount
-      - /mnt/managed_home/farm-ng-user-ertugrulkalkan/farm-ng-amiga/venv:/host-venv    # farm-ng venv
+      - /mnt/managed_home/farm-ng-user-ertugrulkalkan:/mnt/managed_home/farm-ng-user-ertugrulkalkan  # farm-ng venv + kaynaklar
 
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0        # RPLidar
