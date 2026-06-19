@@ -33,7 +33,7 @@
         },
         {
           "uri": {
-            "path": "*",
+            "path": "/state",
             "query": "service_name=filter"
           },
           "every_n": 1
