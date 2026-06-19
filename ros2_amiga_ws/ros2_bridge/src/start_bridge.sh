@@ -53,6 +53,10 @@ sleep 2
 ros2 run ros2_bridge websocket_bridge > "$LOG_DIR/websocket_bridge.log" 2>&1 &
 PID_WS=$!
 
+echo "Starting rosbridge_server (web-teleop için)..."
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml > "$LOG_DIR/rosbridge.log" 2>&1 &
+PID_ROSBRIDGE=$!
+
 ros2 run task_manager task_manager_node \
   --ros-args -p "track_follower_config:=$CONFIG/track_follower.json" > "$LOG_DIR/task_manager.log" 2>&1 &
 PID_TM=$!
@@ -72,9 +76,10 @@ echo "EKF PID:             $PID_EKF"
 echo "LiDAR PID:           $PID_LIDAR"
 echo "Nav2 PID:            $PID_NAV"
 echo "WebSocket Bridge PID:$PID_WS"
+echo "Rosbridge PID:       $PID_ROSBRIDGE"
 echo "Task Manager PID:    $PID_TM"
 echo "Tool Control PID:    $PID_TOOL"
 echo "Press [CTRL+C] to stop."
 
-trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_DESC $PID_EKF $PID_LIDAR $PID_NAV $PID_WS $PID_TM $PID_TOOL 2>/dev/null; exit 0" SIGINT
+trap "kill $PID_CONTROL $PID_GPS $PID_ODO $PID_IMU $PID_CAMERA $PID_MOTOR $PID_DESC $PID_EKF $PID_LIDAR $PID_NAV $PID_WS $PID_ROSBRIDGE $PID_TM $PID_TOOL 2>/dev/null; exit 0" SIGINT
 wait
