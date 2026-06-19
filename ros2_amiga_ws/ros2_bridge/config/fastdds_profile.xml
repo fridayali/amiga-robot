@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <profiles>
+        <!--
+        WiFi erişim noktası multicast'i (DDS Simple Discovery'nin varsayılan
+        keşif mekanizması) istemciler arasında iletmiyor. Bu profil, multicast'e
+        bağımlı olmadan, bilinen IP'lere doğrudan (unicast) keşif paketi
+        göndererek discovery'yi çalıştırır. Bu dosya robot ve PC'de AYNI
+        şekilde kullanılmalı; initialPeersList'e her iki tarafın IP'si de
+        eklenmiştir.
+        -->
+        <participant profile_name="lan_unicast_discovery" is_default_profile="true">
+            <rtps>
+                <builtin>
+                    <discovery_config>
+                        <discoveryProtocol>SIMPLE</discoveryProtocol>
+                    </discovery_config>
+                    <initialPeersList>
+                        <locator>
+                            <udpv4>
+                                <address>10.10.10.117</address>
+                            </udpv4>
+                        </locator>
+                        <locator>
+                            <udpv4>
+                                <address>10.10.10.125</address>
+                            </udpv4>
+                        </locator>
+                    </initialPeersList>
+                </builtin>
+            </rtps>
+        </participant>
+    </profiles>
+</dds>
