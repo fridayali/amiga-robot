@@ -22,8 +22,11 @@ PID_ODO=$!
 python3 $SRC/imu_to_ros.py --service-config $CONFIG/imu_to_ros.json > "$LOG_DIR/imu_to_ros.log" 2>&1 &
 PID_IMU=$!
 
-python3 $SRC/cam_to_ros.py --service-config $CONFIG/cam_to_ros.json > "$LOG_DIR/camera.log" 2>&1 &
-PID_CAMERA=$!
+# CPU tasarrufu için geçici olarak kapatıldı (nav2 + EKF + lidar ile
+# birlikte Jetson CPU'su doygunlaşıyordu, planner/controller döngüleri
+# hedef hız'ın çok altına düşüyordu).
+# python3 $SRC/cam_to_ros.py --service-config $CONFIG/cam_to_ros.json > "$LOG_DIR/camera.log" 2>&1 &
+# PID_CAMERA=$!
 
 python3 $SRC/motor_battery.py --service-config $CONFIG/motor_battery.json > "$LOG_DIR/motor_battery.log" 2>&1 &
 PID_MOTOR=$!
@@ -69,7 +72,7 @@ echo "Control PID:         $PID_CONTROL"
 echo "GPS PID:             $PID_GPS"
 echo "Odometry PID:        $PID_ODO"
 echo "IMU PID:             $PID_IMU"
-echo "Camera PID:          $PID_CAMERA"
+echo "Camera PID:          (devre dışı)"
 echo "Motor/Battery PID:   $PID_MOTOR"
 echo "Description PID:    $PID_DESC"
 echo "EKF PID:             $PID_EKF"
