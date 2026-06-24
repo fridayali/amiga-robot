@@ -21,3 +21,11 @@ scan_to_scan_filter_chain:
         min_z: -1.0
         max_z:  1.0
         invert: false
+    filter3:
+      name: angular_bounds
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        # Sadece ön ±45° (toplam 90°) tutulur, gerisi maskelenir.
+        # 0 rad = lidar'ın önü (laser_joint 180° düzeltmesiyle base_link +x'e hizalı).
+        lower_angle: -0.7854   # -45 derece
+        upper_angle:  0.7854   #  45 derece
